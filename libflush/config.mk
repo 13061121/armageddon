@@ -1,7 +1,7 @@
 # See LICENSE file for license and copyright information
 
 PROJECT = libflush
-ARCH = x86
+ARCH = armv7
 
 LIBFLUSH_VERSION_MAJOR = 0
 LIBFLUSH_VERSION_MINOR = 0
@@ -87,7 +87,7 @@ VERBOSE ?= 0
 COLOR ?= 1
 
 # android
-ANDROID_PLATFORM ?= android-21
+ANDROID_PLATFORM ?= android-23
 
 # thread safe
 WITH_PTHREAD ?= 0
@@ -97,10 +97,10 @@ HAVE_PAGEMAP_ACCESS ?= 1
 
 # time sources
 TIME_SOURCES = (register perf monotonic_clock thread_counter)
-TIME_SOURCE ?= register
+TIME_SOURCE ?= monotonic_clock
 
 # use eviction instead of flush
 USE_EVICTION ?= 0
 
 # Define device
-DEVICE_CONFIGURATION ?= default
+DEVICE_CONFIGURATION ?= cancro

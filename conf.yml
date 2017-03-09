@@ -1,0 +1,6 @@
+libflush:
+  source-directory: /home/larry/Desktop/armageddon/libflush/libflush
+build:
+  directory: /data/local/tmp
+logs:
+  directory: /data/local/tmp

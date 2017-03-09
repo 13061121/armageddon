@@ -5,7 +5,7 @@ PROJECT = input-simulator
 VERSION = 0.0.1
 
 # arch
-ARCH = x86
+ARCH = armv7
 
 # pkg-config binary
 PKG_CONFIG ?= pkg-config
@@ -54,7 +54,7 @@ TARFILE = ${PROJECT}-${VERSION}.tar.gz
 TARDIR = ${PROJECT}-${VERSION}
 
 # android
-ANDROID_PLATFORM ?= android-21
+ANDROID_PLATFORM ?= android-23
 
 # device configuration
 DEVICE_CONFIGURATION ?= ZEROFLTE

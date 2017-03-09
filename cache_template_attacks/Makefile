@@ -130,4 +130,10 @@ uninstall:
 DEPENDS = ${DEPENDDIRS:^=${DEPENDDIR}/}$(addprefix ${DEPENDDIR}/,${OBJECTS:.o=.o.dep})
 -include ${DEPENDS}
 
+mytest: all
+	/opt/android/ndk/toolchains/arm-linux-androideabi-4.9/prebuilt/linux-x86_64/bin/arm-linux-androideabi-gcc --sysroot=/opt/android/ndk/platforms/android-23/arch-arm -s -pie \
+        -o build/armv7/release/bin/cache_template_attack build/armv7/release/cache_template_attack/lock.o build/armv7/release/cache_template_attack/calibrate.o build/armv7/release/cache_template_attack/main.o -lflush -lc
+	/opt/android/sdk/platform-tools/adb push build/armv7/release/bin/cache_template_attack /data/local/tmp
+	/opt/android/sdk/platform-tools/adb shell data/local/tmp/cache_template_attack
+
 .PHONY: all options clean doc debug valgrind gdb dist install uninstall
