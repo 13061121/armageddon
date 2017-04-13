@@ -8,7 +8,8 @@ logger = logging.getLogger('default')
 def execute_command(command, resolveoutfunc=None):
     '''
     :param command: list for string of the command
-    :param resolveoutfunc: function that will be called for each output line of command 
+    :param resolveoutfunc: function that will be called for each output line of 
+                        command 
     :return: subprocess.Popen()
     '''
     proc = subprocess.Popen(

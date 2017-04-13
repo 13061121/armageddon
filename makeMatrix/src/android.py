@@ -15,19 +15,14 @@ def adb_shell(command, resolveoutfunc=None):
 def adb_pull(device_file_path, host_file_path):
     execute_command(["adb", "pull", device_file_path, host_file_path])
 
+
 def adb_kill_by_pid(pid):
-    adb_shell([
-        'kill',
-        pid
-    ])
+    adb_shell(['kill', pid])
+
 
 def adb_resolve_kill(outline):
-    cmdlines.resolve_ps_and_kill(outline,adb_kill_by_pid)
+    cmdlines.resolve_ps_and_kill(outline, adb_kill_by_pid)
+
 
 def adb_killbyname(name):
-    adb_shell([
-        "ps",
-        "|",
-        "grep",
-        name
-    ], resolveoutfunc=adb_resolve_kill)
+    adb_shell(["ps", "|", "grep", name], resolveoutfunc=adb_resolve_kill)

@@ -1,3 +1,6 @@
 *.pyc
 .idea
 data/
+graph/
+tmp/
+src/__pycache__/
