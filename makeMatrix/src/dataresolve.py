@@ -33,7 +33,7 @@ def pretreatment(filepath, outfilepath):
                 # print(line)
                 # write_file.write(line[0][0] + ',' + line[0][1] + '\n')
                 # 过滤掉部分较小的数据
-                if int(line[0][1]) > 5:
+                if int(line[0][1]) > 20:
                     rescontent.append(line[0][0] + ',' + line[0][1] + '\n')
         write_file.writelines(rescontent)
         read_file.close()
@@ -47,7 +47,7 @@ def readlogfile(filepath, filename):
         filepath: string: 完整的文件路径
         filename: string: 文件名，不包含文件名后缀
 
-    Returns: dict: 字典，包含average、minimum、maxcimum三个DataFrame类型数据
+    Returns: dict: 字典，包含orignal、average、minimum、maxcimum三个DataFrame类型数据
 
     '''
     try:
@@ -95,6 +95,7 @@ def readlogfile(filepath, filename):
         dfdmax = dfdmax.set_index("Offset")
         dfdmin = dfdmin.set_index("Offset")
         return {
+            "original": dfs,
             "average": dfdave,
             "maximum": dfdmax,
             "minimum": dfdmin

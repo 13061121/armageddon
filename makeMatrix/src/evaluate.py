@@ -3,21 +3,31 @@
 '''
 
 import functools
-import math
 import os
 import random
 import re
-import sqlite3
 
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 import config
 import dataresolve as dr
+import database as db
 
 
-def addtable(datatable, data):
+def addtablerows(datatable, data):
+    '''
+    合并单元格
+    '''
+    if datatable is None:
+        return data
+    else:
+        return pd.concat([datatable, data], join='outer')
+
+
+def addtablecolumns(datatable, data):
     '''
     合并单元表格
     '''
@@ -35,9 +45,44 @@ def addtable(datatable, data):
         #     copy=True)
 
 
-def getdatas(dirpath):
+def gethistogram(conn):
     '''
-    读取dirpath文件夹下面所有以.log结尾的文件中的数据并合成一个表格
+    获取所有地址的数据分分布图
+    注意：SQL语言中select语句会合并同类项
+    '''
+    maxhitcount = 350
+    datas = pd.Series([0] * maxhitcount, index=range(0, maxhitcount))
+    for tablename in config.KEYBOARDINPUTSDICT:
+        data = db.readcolumndatafromcursor(db.readcursor(conn, tablename), 2)
+        for v in data:
+            datas[v] = datas[v] + 1
+    return datas
+
+
+def draw_histogram(datas, pngfilepath=None):
+    '''
+    将datas绘制直方图
+    '''
+    datas.plot(grid=True, logx=False)
+    newdatas = pd.Series([0.0] * datas.count(), index=datas.index)
+    datasum = datas.sum()
+    print(datasum)
+    count = 0
+    for index in datas.index:
+        count += datas[index]
+        newdatas[index] = count * 1.0 / datasum
+    print(newdatas)
+    newdatas.plot(secondary_y=True, mark_right=True)
+    if pngfilepath is not None:
+        plt.savefig(pngfilepath)
+    else:
+        plt.show()
+    plt.clf()
+
+
+def getdatas(dirpath, conn):
+    '''
+    读取dirpath文件夹下面所有以.log结尾的文件中的数据并存储在数据库conn中
     '''
     avedatatable = None
     mindatatable = None
@@ -57,14 +102,14 @@ def getdatas(dirpath):
         # print(filename)
         if os.path.isfile(filepath):
             data = dr.dowithlogfile(filepath, filename)
-            avedatatable = addtable(avedatatable, data['average'])
-            mindatatable = addtable(mindatatable, data['minimum'])
-            maxdatatable = addtable(maxdatatable, data['maximum'])
-    return {
-        "average": avedatatable.fillna(0),
-        "minimum": mindatatable.fillna(0),
-        "maximum": maxdatatable.fillna(0)
-    }
+            # 存储原始数据
+            data['original'].to_sql(file[:-4], conn)
+            avedatatable = addtablecolumns(avedatatable, data['average'])
+            mindatatable = addtablecolumns(mindatatable, data['minimum'])
+            maxdatatable = addtablecolumns(maxdatatable, data['maximum'])
+    avedatatable.fillna(0).to_sql('average', conn)
+    mindatatable.fillna(0).to_sql('minimum', conn)
+    maxdatatable.fillna(0).to_sql('maximum', conn)
 
 
 def distence(a, b):
@@ -169,7 +214,56 @@ def evaluate_addresses(df: pd.DataFrame):
     return thresholds
 
 
-def draw_evaluate_addresses_graphes(dfs, graph_dir):
+def draw_address_hits_graph(dfs, title, graphpath=None):
+    '''
+    绘制Hits分布图
+    '''
+    tmpdf = pd.DataFrame({
+        'KBchar':
+        dfs['KBchar'].map(config.KEYBOARDINPUTSDICT.index),
+        'Hits':
+        dfs['Hits']
+    })
+    tmpdf.plot(
+        kind="scatter",
+        x='KBchar',
+        y='Hits',
+        title=title,
+        xticks=range(0, len(config.KEYBOARDINPUTSDICT)),
+        grid=True,
+        rot=90).set_xticklabels(config.KEYBOARDINPUTSDICT)
+    if graphpath is None:
+        plt.show()
+    else:
+        plt.savefig(graphpath)
+    plt.clf()
+
+
+def get_address_hits_data(conn, address):
+    '''
+    获取某一地址的分布数据
+    '''
+    datas = None
+    dataslength = 1
+    for c in config.KEYBOARDINPUTSDICT:
+        cursor = db.readcursor(conn, c, condition="Offset='" + address + "'")
+        data = db.readcolumndatafromcursor(cursor, 2)
+        # print(data)
+        length = len(data)
+        rows = pd.DataFrame(
+            {
+                'KBchar': [c] * length,
+                "Hits": data
+            },
+            index=range(dataslength, dataslength + length))
+        dataslength += length
+        datas = addtablerows(datas, rows)
+    return datas
+
+
+def draw_evaluate_addresses_graphes(conn,
+                                    line_graph_dir,
+                                    scatter_graph_dir=None):
     '''
     Args:
         df: pd.DataFrame, the all table contains all the data about the calling
@@ -179,50 +273,61 @@ def draw_evaluate_addresses_graphes(dfs, graph_dir):
     Returns: None
 
     '''
-    if not os.path.exists(graph_dir) or not os.path.isdir(graph_dir):
-        os.makedirs(graph_dir)
+    if not os.path.exists(line_graph_dir) or not os.path.isdir(line_graph_dir):
+        os.makedirs(line_graph_dir)
+    if scatter_graph_dir is not None and (
+            not os.path.exists(scatter_graph_dir) or
+            not os.path.isdir(scatter_graph_dir)):
+        os.makedirs(scatter_graph_dir)
     # print(df.columns)
-    avedf = dfs['average'].T
-    mindf = dfs['minimum'].T
-    maxdf = dfs['maximum'].T
+    avedf = db.read_sql_table('average', conn).reindex(
+        columns=config.KEYBOARDINPUTSDICT).T
+    mindf = db.read_sql_table('minimum', conn).reindex(
+        columns=config.KEYBOARDINPUTSDICT).T
+    maxdf = db.read_sql_table('maximum', conn).reindex(
+        columns=config.KEYBOARDINPUTSDICT).T
     # print(df)
     xcount = len(config.KEYBOARDINPUTSDICT)
     for column in avedf.columns:
         threshold = evaluate_address(avedf[column].values)
+        t = avedf[column].loc[avedf[column] > threshold].count()
+        if t >= 2 or t == 0:
+            continue
         tmp = pd.DataFrame({
             'Offset': avedf.index,
             'Average': avedf[column],
             'Minimum': mindf[column],
             'Maximum': maxdf[column],
-            'Threshold': [threshold] * len(avedf.index.values)
+            'Threshold': [threshold] * len(avedf.index.values),
+            # 'Threshold-L': [threshold] * len(avedf.index.values),
+            # 'Threshold-R': [threshold] * len(avedf.index.values)
         })
-        ycount = math.ceil(avedf[column].max())
+        # ycount = math.ceil(avedf[column].max())
+        ycount = math.ceil(maxdf[column].max())
         tmp.plot(
             grid=True,
             title=column + ' Hits Count',
             xticks=range(0, xcount),
-            yticks=range(0, ycount),
-            secondary_y=['Maximum'],
-            mark_right=False,
+            yticks=range(0, ycount, math.ceil(ycount / 30)),
+            # secondary_y=['Maximum', 'Threshold-R'],
+            # mark_right=False,
             rot=90)
         # plt.show()
-        if avedf[column].loc[avedf[column] > threshold].count() < 5:
-            print("Drawing picture of %s" % column)
-            plt.savefig(os.path.join(graph_dir, column + ".png"))
+        print("Drawing picture of %s" % column)
+        plt.savefig(os.path.join(line_graph_dir, column + ".png"))
         plt.clf()
+        if scatter_graph_dir is not None:
+            draw_address_hits_graph(
+                get_address_hits_data(conn, column),
+                column + ' Hits Count Distribution',
+                os.path.join(scatter_graph_dir, column + ".png"))
 
 
 if __name__ == "__main__":
-    datas = getdatas("/home/larry/Documents/armageddon/makeMatrix/data")
-    print(datas)
-    if os.path.exists('test.db'):
-        os.remove('test.db')
-    conn = sqlite3.connect('test.db')
-    for k, v in datas.items():
-        v.to_sql(k, conn)
-    draw_evaluate_addresses_graphes(datas, "../graph")
+    conn = db.initdatabase("test.db", False)
+    # getdatas("/home/larry/Documents/armageddon/makeMatrix/data", conn)
+    draw_evaluate_addresses_graphes(conn, "../graph", "../graph/scatter")
+    conn.close()
     # datas = getdatas("/home/larry/Documents/log")
     # print(datas)
     # datas.to_csv("/home/larry/Documents/log/res/res.log")
-    # getKMeans([1, 2, 3, 4, 5, 6, 7, 8, 9], 2)
-    # print(getthreshold([1, 2, 3, 4, 5, 10, 7, 8, 9], 2))
