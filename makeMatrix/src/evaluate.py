@@ -1,3 +1,4 @@
+# -*- coding:utf-8 -*-
 '''
 处理评估数据
 '''
@@ -112,7 +113,7 @@ def getdatas(dirpath, conn):
     maxdatatable.fillna(0).to_sql('maximum', conn)
 
 
-def distence(a, b):
+def distance(a, b):
     '''
     获得两点的欧几里得距离
     '''
@@ -140,15 +141,26 @@ def getKMeans(datas, k, precision=1):
     length = len(datas)
     if length == 0:
         return None
+    # 初始聚类中心的选择
     average = []
-    for i in range(0, k):
+    average.append(datas[math.floor(random.random() * length)])
+    for i in range(1, k):
         # print(i)
-        average.append(datas[math.floor(random.random() * length)])
+        dis = 0
+        order = 0
+        for j in range(0, length):
+            tmpd = functools.reduce(
+                sum, map(lambda x: math.pow(distance(datas[j], x), 2),
+                         average))
+            if tmpd > dis:
+                tmpd = dis
+                order = i
+        average.append(datas[order])
     pre = precision + 1
     while pre >= precision:
         matrix = []
         for i in range(0, k):
-            fc = functools.partial(distence, average[i])
+            fc = functools.partial(distance, average[i])
             matrix.append(list(map(fc, datas)))
         # 转置矩阵
         # print(matrix)
@@ -161,7 +173,7 @@ def getKMeans(datas, k, precision=1):
             res[index].append(datas[i])
         old_average = average
         average = list(map(np.average, res))
-        pre = sum([distence(old_average[i], average[i]) for i in range(0, k)])
+        pre = sum([distance(old_average[i], average[i]) for i in range(0, k)])
     return res
 
 
@@ -205,7 +217,7 @@ def evaluate_address_key_value(df):
     return [df[0], evaluate_address(df[1:])]
 
 
-def evaluate_addresses(df: pd.DataFrame):
+def evaluate_addresses(df):
     '''
     评估获得的数据中所有的内存地址的关键性
     '''
@@ -214,17 +226,18 @@ def evaluate_addresses(df: pd.DataFrame):
     return thresholds
 
 
-def draw_address_hits_graph(dfs, title, graphpath=None):
+def draw_address_hits_graph(dfs, title, ax=None):
     '''
     绘制Hits分布图
     '''
     tmpdf = pd.DataFrame({
         'KBchar':
-        dfs['KBchar'].map(config.KEYBOARDINPUTSDICT.index),
+            dfs['KBchar'].map(config.KEYBOARDINPUTSDICT.index),
         'Hits':
-        dfs['Hits']
+            dfs['Hits']
     })
     tmpdf.plot(
+        ax=ax,
         kind="scatter",
         x='KBchar',
         y='Hits',
@@ -232,11 +245,6 @@ def draw_address_hits_graph(dfs, title, graphpath=None):
         xticks=range(0, len(config.KEYBOARDINPUTSDICT)),
         grid=True,
         rot=90).set_xticklabels(config.KEYBOARDINPUTSDICT)
-    if graphpath is None:
-        plt.show()
-    else:
-        plt.savefig(graphpath)
-    plt.clf()
 
 
 def get_address_hits_data(conn, address):
@@ -261,9 +269,7 @@ def get_address_hits_data(conn, address):
     return datas
 
 
-def draw_evaluate_addresses_graphes(conn,
-                                    line_graph_dir,
-                                    scatter_graph_dir=None):
+def draw_evaluate_addresses_graphes(conn, line_graph_dir):
     '''
     Args:
         df: pd.DataFrame, the all table contains all the data about the calling
@@ -275,10 +281,6 @@ def draw_evaluate_addresses_graphes(conn,
     '''
     if not os.path.exists(line_graph_dir) or not os.path.isdir(line_graph_dir):
         os.makedirs(line_graph_dir)
-    if scatter_graph_dir is not None and (
-            not os.path.exists(scatter_graph_dir) or
-            not os.path.isdir(scatter_graph_dir)):
-        os.makedirs(scatter_graph_dir)
     # print(df.columns)
     avedf = db.read_sql_table('average', conn).reindex(
         columns=config.KEYBOARDINPUTSDICT).T
@@ -304,29 +306,144 @@ def draw_evaluate_addresses_graphes(conn,
         })
         # ycount = math.ceil(avedf[column].max())
         ycount = math.ceil(maxdf[column].max())
+        # 绘制两个图表在同一个子图中
+        fig, (axe1, axe2) = plt.subplots(1, 2, sharey=True, figsize=(15, 6))
         tmp.plot(
+            ax=axe1,
             grid=True,
             title=column + ' Hits Count',
             xticks=range(0, xcount),
-            yticks=range(0, ycount, math.ceil(ycount / 30)),
+            yticks=range(0, ycount + int(ycount / 30), math.ceil(ycount / 30)),
             # secondary_y=['Maximum', 'Threshold-R'],
             # mark_right=False,
             rot=90)
         # plt.show()
         print("Drawing picture of %s" % column)
+        draw_address_hits_graph(
+            get_address_hits_data(conn, column),
+            column + ' Hits Count Distribution',
+            ax=axe2)
         plt.savefig(os.path.join(line_graph_dir, column + ".png"))
         plt.clf()
-        if scatter_graph_dir is not None:
-            draw_address_hits_graph(
-                get_address_hits_data(conn, column),
-                column + ' Hits Count Distribution',
-                os.path.join(scatter_graph_dir, column + ".png"))
+
+
+def makematrixes(conn):
+    '''
+    test
+    '''
+    threshold = {'Offset': [], 'threshold': [], 'More': [], 'NotMore': []}
+    value = {'Offset': []}
+    for c in config.KEYBOARDINPUTSDICT:
+        value[c] = []
+    count = {'Offset': []}
+    for c in config.KEYBOARDINPUTSDICT:
+        count[c] = []
+    avedf = db.read_sql_table('average', conn).reindex(
+        columns=config.KEYBOARDINPUTSDICT).T
+    # print(df)
+    for column in avedf.columns:
+        t1 = evaluate_address(avedf[column].values)
+        t = avedf[column].loc[avedf[column] > t1].count()
+        if t >= 2 or t == 0:
+            continue
+        df = get_address_hits_data(conn, column)
+        # print(df)
+        # print(df.index)
+        t2 = np.int64(evaluate_address(df['Hits'].values))
+        # print(t2)
+        threshold['Offset'].append(column)
+        value['Offset'].append(column)
+        count['Offset'].append(column)
+        threshold['threshold'].append(t2)
+        threshold['More'].append(df['Hits'].loc[df['Hits'] > t2].count())
+        threshold['NotMore'].append(df['Hits'].loc[df['Hits'] <= t2].count())
+        for c in config.KEYBOARDINPUTSDICT:
+            c1 = df.loc[(df['KBchar'] == c) & (df['Hits'] >
+                                               t2), :].KBchar.count()
+            c2 = df.loc[(df['KBchar'] == c) & (df['Hits'] <=
+                                               t2), :].KBchar.count()
+            t = 0
+            if c1 > 0:
+                t += 2
+            if c2 > 0:
+                t += 1
+            value[c].append(t)
+            count[c].append([c1, c2])
+    return {
+        'threshold': pd.DataFrame(threshold),
+        'value': pd.DataFrame(value),
+        # 'count': pd.DataFrame(count)
+    }
+
+
+def getkeyaddressesandmatrix(valuematrix):
+    '''
+    通过矩阵获得关键地址的地址与相关分析矩阵
+    '''
+    resaddresses = []
+    # todo： 这里可以修改，reset_index和矩阵转换可在函数外进行
+    # valuematrix = matrixes['value'].set_index('Offset').T
+    # print(valuematrix)
+    tables = [valuematrix]
+    while len(tables) > 0:
+        addresses = list(tables[0].columns.values)
+        tmpvalue = pd.DataFrame(
+            {
+                'Count': [
+                    np.max([
+                        table[addr].drop_duplicates().count()
+                        for table in tables
+                    ]) for addr in addresses
+                ],
+                'Var': [
+                    np.sum(
+                        [table[addr].value_counts().var() for table in tables])
+                    for addr in addresses
+                ]
+            },
+            index=addresses).fillna(0)
+        dt = dict(list(tmpvalue.groupby('Count')['Var']))
+        ks = list(dt.keys())
+        sr = dt[max(ks)]
+        # 获得最佳的地址
+        address = sr.loc[sr.values == sr.min()].index.values[0]
+        resaddresses.append(address)
+        addresses.append(address)
+        tmptables = []
+        for table in tables:
+            for name, group in table.groupby(address):
+                t = group.drop(address, axis=1)
+                if len(list(t.index.values)) > 1:
+                    tmptables.append(t)
+        tables = tmptables
+    return valuematrix.loc[:, resaddresses]
+
+
+def writeconfigurationfile(configfile, threshold, matrix):
+    ''' 利用得到的阈值和相关矩阵生成配置文件，用于最后结果的检测
+    Args:
+        configfile: 配置文件的地址
+        threshold: 各个地址的阈值
+        matrix: 相关矩阵
+
+    Returns: 如果成功返回True，否则返回False
+
+    '''
+    pass
 
 
 if __name__ == "__main__":
     conn = db.initdatabase("test.db", False)
     # getdatas("/home/larry/Documents/armageddon/makeMatrix/data", conn)
-    draw_evaluate_addresses_graphes(conn, "../graph", "../graph/scatter")
+    # draw_evaluate_addresses_graphes(conn, "../graph")
+    matrixes = makematrixes(conn)
+    # print("Threshold:\n")
+    # print(matrixes['threshold'])
+    # print("\nValue:\n")
+    # print(matrixes['value'])
+    # matrixes['threshold'].to_csv('../getres/threshold.csv')
+    # matrixes['value'].to_csv('../getres/values.csv')
+    print(getkeyaddressesandmatrix(matrixes['value'].set_index('Offset').T))
     conn.close()
     # datas = getdatas("/home/larry/Documents/log")
     # print(datas)

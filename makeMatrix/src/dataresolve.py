@@ -33,7 +33,7 @@ def pretreatment(filepath, outfilepath):
                 # print(line)
                 # write_file.write(line[0][0] + ',' + line[0][1] + '\n')
                 # 过滤掉部分较小的数据
-                if int(line[0][1]) > 20:
+                if int(line[0][1]) > config.ORI_DATA_THRESHOLD:
                     rescontent.append(line[0][0] + ',' + line[0][1] + '\n')
         write_file.writelines(rescontent)
         read_file.close()
@@ -42,7 +42,7 @@ def pretreatment(filepath, outfilepath):
 
 def readlogfile(filepath, filename):
     '''
-    
+
     Args:
         filepath: string: 完整的文件路径
         filename: string: 文件名，不包含文件名后缀
