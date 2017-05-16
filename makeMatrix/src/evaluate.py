@@ -404,6 +404,7 @@ def getkeyaddressesandmatrix(valuematrix):
             index=addresses).fillna(0)
         dt = dict(list(tmpvalue.groupby('Count')['Var']))
         ks = list(dt.keys())
+        # todo: ks 可能为0
         sr = dt[max(ks)]
         # 获得最佳的地址
         address = sr.loc[sr.values == sr.min()].index.values[0]
@@ -419,7 +420,7 @@ def getkeyaddressesandmatrix(valuematrix):
     return valuematrix.loc[:, resaddresses]
 
 
-def writeconfigurationfile(configfile, threshold, matrix):
+def writeconfigurationfile(configfile, thresholds, matrix):
     ''' 利用得到的阈值和相关矩阵生成配置文件，用于最后结果的检测
     Args:
         configfile: 配置文件的地址
@@ -429,7 +430,29 @@ def writeconfigurationfile(configfile, threshold, matrix):
     Returns: 如果成功返回True，否则返回False
 
     '''
-    pass
+    writestring = ""
+    writestring += "address count:\n"+str(matrix.columns.values.size)+"\n"
+    writestring += "character count:\n"+str(matrix.index.values.size)+"\n"
+    writestring += "thres:\n" + str(config.ORI_DATA_THRESHOLD)+"\n"
+    writestring += "addresses:\n"
+    for address in matrix.columns.values:
+        writestring += address+"\t"
+    writestring += "\n"
+    writestring += "thresholds:\n"
+    for address in matrix.columns.values:
+        writestring += str(thresholds[thresholds['Offset'] == address]['threshold'].values[0])+"\t"
+    writestring += "\n"
+    writestring += "characters:\n"
+    for character in matrix.index.values:
+        writestring += character+"\t"
+    writestring += "\n"
+    writestring += "matrixvalues:\n"
+    for character in matrix.index.values:
+        for address in matrix.loc[character, :].values:
+            writestring += str(address)+"\t"
+        writestring += "\n"
+    with open(configfile, "w") as cfile:
+        cfile.write(writestring)
 
 
 if __name__ == "__main__":
@@ -443,7 +466,8 @@ if __name__ == "__main__":
     # print(matrixes['value'])
     # matrixes['threshold'].to_csv('../getres/threshold.csv')
     # matrixes['value'].to_csv('../getres/values.csv')
-    print(getkeyaddressesandmatrix(matrixes['value'].set_index('Offset').T))
+    matrix = getkeyaddressesandmatrix(matrixes['value'].set_index('Offset').T)
+    writeconfigurationfile("config.txt", matrixes['threshold'], matrix)
     conn.close()
     # datas = getdatas("/home/larry/Documents/log")
     # print(datas)
