@@ -1,7 +1,7 @@
 /* See LICENSE file for license and copyright information */
 
 /* configuration for MI 3W*/
-#define NUMBER_OF_SETS 4096
+#define NUMBER_OF_SETS 2048
 #define LINE_LENGTH_LOG2 6
 #define LINE_LENGTH 64
 #define ES_EVICTION_COUNTER 4

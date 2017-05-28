@@ -40,7 +40,7 @@ uint64_t
 readThres(FILE* configFile);
 
 void
-readAddresses(FILE* configFile, size_t addressCount, int64_t** addresses);
+readAddresses(FILE* configFile, size_t addressCount, size_t** addresses);
 
 void
 readThresholds(FILE* configFile, size_t addressCount, uint64_t** thresholds);

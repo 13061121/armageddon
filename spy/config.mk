@@ -70,8 +70,14 @@ ADB_SHELL = ${ADB} shell
 ADB_PUSH = ${ADB} push
 
 # remote setting
+ADDRESS_START = b6bc6000
+ADDRESS_END = b6be0000
 REMOTE_EXECUTE_FILE_DIR = /data/local/tmp
 ATTACKED_LIB_PATH = /system/lib/libinput.so
+
+# setting for myphone
+
+THRESHOLD = 960
 
 # android device
 WITH_ANDROID ?= 1

@@ -171,14 +171,14 @@ readThres(FILE* configFile)
 }
 
 void
-readAddresses(FILE* configFile, size_t addressCount, int64_t** addresses)
+readAddresses(FILE* configFile, size_t addressCount, size_t** addresses)
 {
     size_t i;
-    *addresses = (int64_t *)malloc(sizeof(int64_t)*addressCount);
+    *addresses = (size_t *)malloc(sizeof(size_t)*addressCount);
     fseek(configFile, getOffset(configFile, ADDRESSES_HEADER), SEEK_SET);
     for (i = 0; i < addressCount; ++i)
     {
-        (*addresses)[i] = readNextHexInt(configFile);
+        (*addresses)[i] = (size_t)readNextHexInt(configFile);
         if ((*addresses)[i] == 0){
             free(*addresses);
             *addresses = NULL;

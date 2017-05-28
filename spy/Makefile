@@ -80,8 +80,11 @@ push:#build
 	${ADB_PUSH} ${BUILDDIR_RELEASE}/${BINDIR}/${PROJECT} ${REMOTE_EXECUTE_FILE_DIR}/
 	${ADB_SHELL} chmod +x ${REMOTE_EXECUTE_FILE_DIR}/${PROJECT}
 
-androidrun: push
-	${ADB_SHELL} ${REMOTE_EXECUTE_FILE_DIR}/${PROJECT} -c 0 -r b6b64000-b6b7e000 -o 00000000 -f 1 ${ATTACKED_LIB_PATH}
+remoterun:
+	${ADB_SHELL} ${REMOTE_EXECUTE_FILE_DIR}/${PROJECT} -c 0 -t ${THRESHOLD} -r ${ADDRESS_START}-${ADDRESS_END} -o 00000000 -f 1 ${ATTACKED_LIB_PATH}
+
+androidrun: push remoterun
+	
 
 # debug build
 
