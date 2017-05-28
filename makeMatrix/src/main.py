@@ -120,10 +120,10 @@ def run_input_simulator_and_cache_attackes(libpath,
 
 begintime = datetime.datetime.now()
 run_input_simulator_and_cache_attackes(
-    "/system/lib/libinput.so",
-    "b6bec000",
-    "b6c06000",
-    "00000000",
+    config.LIB_PATH,
+    config.LIB_MAP_START,
+    config.LIB_MAP_END,
+    config.LIB_MAP_OFFSET,
     log_file_path="/data/local/tmp/log/test/")
 # t = input()
 endtime = datetime.datetime.now()

@@ -14,10 +14,18 @@ PROJECT_DIR = os.path.abspath(os.path.join(sys.path[0], '..'))
 HOST_LOG_FILE = os.path.join(PROJECT_DIR, "data/")
 TMP_FILE_PATH = os.path.join(PROJECT_DIR, "tmp/tmp.log")
 KEYBOARDINPUTSDICT = [
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
+    # 'a', 'b', 'c', 'd',
+    'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
     'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'space', 'enter',
     'backspace', 'none'
 ]
+
+ADB_PATH = "adb"
+
+LIB_PATH = "/system/lib/libinput.so"
+LIB_MAP_START = "b6bc6000"
+LIB_MAP_END = "b6be0000"
+LIB_MAP_OFFSET = "00000000"
 
 if __name__ == "__main__":
     os.chdir("/home/larry/")
